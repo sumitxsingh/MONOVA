@@ -117,7 +117,8 @@ export default function HomeScreen() {
   const [budgets, setBudgets] = useState<MonthlyBudgets>({});
   const [savingsGoal, setSavingsGoal] = useState(0);
   const [loaded, setLoaded] = useState(false);
-    // Sync theme changes from Settings screen
+
+  // Sync theme changes from Settings screen
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
       "monova-theme-change",
@@ -220,9 +221,7 @@ export default function HomeScreen() {
           AsyncStorage.getItem(STORAGE_KEY),
         ]);
 
-        const recurring = savedRecurring
-          ? JSON.parse(savedRecurring)
-          : [];
+        const recurring = savedRecurring ? JSON.parse(savedRecurring) : [];
 
         const transactionList = savedTransactions
           ? JSON.parse(savedTransactions)
@@ -242,17 +241,11 @@ export default function HomeScreen() {
           let dueDate = parseLocalDate(item.nextDueDate);
           let safety = 0;
 
-          while (
-            dueDate &&
-            item.nextDueDate <= today &&
-            safety < 500
-          ) {
-            const transactionId =
-              `recurring-${item.id}-${item.nextDueDate}`;
+          while (dueDate && item.nextDueDate <= today && safety < 500) {
+            const transactionId = `recurring-${item.id}-${item.nextDueDate}`;
 
             const alreadyExists = transactionList.some(
-              (transaction: { id?: string }) =>
-                transaction.id === transactionId
+              (transaction: { id?: string }) => transaction.id === transactionId
             );
 
             if (!alreadyExists) {
@@ -283,29 +276,13 @@ export default function HomeScreen() {
               dueDate.setDate(day + 7);
             } else if (item.frequency === "Monthly") {
               const targetMonth = month + 1;
-              const lastDay = new Date(
-                year,
-                targetMonth + 1,
-                0
-              ).getDate();
+              const lastDay = new Date(year, targetMonth + 1, 0).getDate();
 
-              dueDate = new Date(
-                year,
-                targetMonth,
-                Math.min(day, lastDay)
-              );
+              dueDate = new Date(year, targetMonth, Math.min(day, lastDay));
             } else if (item.frequency === "Yearly") {
-              const lastDay = new Date(
-                year + 1,
-                month + 1,
-                0
-              ).getDate();
+              const lastDay = new Date(year + 1, month + 1, 0).getDate();
 
-              dueDate = new Date(
-                year + 1,
-                month,
-                Math.min(day, lastDay)
-              );
+              dueDate = new Date(year + 1, month, Math.min(day, lastDay));
             } else {
               break;
             }
@@ -327,53 +304,53 @@ export default function HomeScreen() {
           }
         }
 
-      if (recurringChanged) {
-        const permissions = await Notifications.getPermissionsAsync();
-        let granted = permissions.granted;
+        if (recurringChanged) {
+          const permissions = await Notifications.getPermissionsAsync();
+          let granted = permissions.granted;
 
-        if (!granted) {
-          const requested = await Notifications.requestPermissionsAsync();
-          granted = requested.granted;
-        }
-
-        if (granted) {
-          for (const item of recurring) {
-            if (!item.active) continue;
-
-            const dueDate = parseLocalDate(item.nextDueDate);
-            if (!dueDate) continue;
-
-            if (item.notificationId) {
-              await Notifications.cancelScheduledNotificationAsync(
-                item.notificationId
-              ).catch(() => {});
-            }
-
-            dueDate.setHours(9, 0, 0, 0);
-
-            const notificationId =
-              await Notifications.scheduleNotificationAsync({
-                content: {
-                  title: "MONOVA Payment Reminder",
-                  body: `${item.title} — ₹${item.amount} is due.`,
-                  sound: true,
-                  data: { recurringId: item.id },
-                },
-                trigger: {
-                  type: Notifications.SchedulableTriggerInputTypes.DATE,
-                  date: dueDate,
-                },
-              });
-
-            item.notificationId = notificationId;
+          if (!granted) {
+            const requested = await Notifications.requestPermissionsAsync();
+            granted = requested.granted;
           }
-        }
 
-        await AsyncStorage.setItem(
-          "monova_recurring_transactions",
-          JSON.stringify(recurring)
-        );
-      }
+          if (granted) {
+            for (const item of recurring) {
+              if (!item.active) continue;
+
+              const dueDate = parseLocalDate(item.nextDueDate);
+              if (!dueDate) continue;
+
+              if (item.notificationId) {
+                await Notifications.cancelScheduledNotificationAsync(
+                  item.notificationId
+                ).catch(() => {});
+              }
+
+              dueDate.setHours(9, 0, 0, 0);
+
+              const notificationId =
+                await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: "MONOVA Payment Reminder",
+                    body: `${item.title} — ₹${item.amount} is due.`,
+                    sound: true,
+                    data: { recurringId: item.id },
+                  },
+                  trigger: {
+                    type: Notifications.SchedulableTriggerInputTypes.DATE,
+                    date: dueDate,
+                  },
+                });
+
+              item.notificationId = notificationId;
+            }
+          }
+
+          await AsyncStorage.setItem(
+            "monova_recurring_transactions",
+            JSON.stringify(recurring)
+          );
+        }
       } catch (error) {
         console.log("Automatic recurring processing failed:", error);
       } finally {
@@ -383,14 +360,11 @@ export default function HomeScreen() {
 
     processDueRecurring();
 
-    const subscription = AppState.addEventListener(
-      "change",
-      (state) => {
-        if (state === "active") {
-          processDueRecurring();
-        }
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        processDueRecurring();
       }
-    );
+    });
 
     return () => {
       mounted = false;
@@ -685,8 +659,111 @@ export default function HomeScreen() {
     }
 
     await saveTransactions(updated);
+
+    // Declared outside the if-block so it can be used after the modal closes
+    const alerts: string[] = [];
+
+    // Check budget alerts only for newly added expenses
+    if (!editingId && type === "expense") {
+      const transactionMonth = getMonthKey(parsedDate);
+      const currentMonthBudgets = budgets[transactionMonth] || {};
+      console.log("MONOVA BUDGET DEBUG:", {
+        type,
+        category,
+        transactionMonth,
+        budgets,
+        currentMonthBudgets,
+        categoryBudget: currentMonthBudgets[category],
+        transactionDate,
+        editingId,
+      });
+
+      const previousMonthExpenses = transactions
+        .filter((t) => {
+          const date = new Date(t.date);
+
+          return (
+            t.type === "expense" &&
+            !Number.isNaN(date.getTime()) &&
+            getMonthKey(date) === transactionMonth
+          );
+        })
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const newMonthExpenses = previousMonthExpenses + value;
+
+      // Overall monthly budget
+      const categoryBudgetsTotal = Object.entries(currentMonthBudgets)
+        .filter(([name]) => name !== "Overall")
+        .reduce((sum, [, budget]) => sum + budget, 0);
+
+      const overallBudget =
+        currentMonthBudgets.Overall || categoryBudgetsTotal;
+
+      if (overallBudget > 0) {
+        const previousProgress = previousMonthExpenses / overallBudget;
+        const newProgress = newMonthExpenses / overallBudget;
+
+        if (previousProgress < 1 && newProgress >= 1) {
+          alerts.push(
+            `Overall monthly budget exceeded! You have spent ${formatMoney(newMonthExpenses)} against ${formatMoney(overallBudget)}.`
+          );
+        } else if (previousProgress < 0.8 && newProgress >= 0.8) {
+          alerts.push(
+            `You have used 80% of your overall monthly budget (${formatMoney(newMonthExpenses)} of ${formatMoney(overallBudget)}).`
+          );
+        }
+      }
+
+      // Category-wise budget
+      const categoryBudget = currentMonthBudgets[category];
+
+      if (categoryBudget > 0) {
+        const previousCategoryExpenses = transactions
+          .filter((t) => {
+            const date = new Date(t.date);
+
+            return (
+              t.type === "expense" &&
+              t.category === category &&
+              !Number.isNaN(date.getTime()) &&
+              getMonthKey(date) === transactionMonth
+            );
+          })
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        const newCategoryExpenses = previousCategoryExpenses + value;
+        const previousProgress = previousCategoryExpenses / categoryBudget;
+        const newProgress = newCategoryExpenses / categoryBudget;
+        console.log("MONOVA ALERT CALCULATION:", {
+        previousCategoryExpenses,
+        newCategoryExpenses,
+        categoryBudget,
+        previousProgress,
+        newProgress,
+      });
+
+        if (previousProgress < 1 && newProgress >= 1) {
+          alerts.push(
+            `${category} budget exceeded! Spent ${formatMoney(newCategoryExpenses)} against ${formatMoney(categoryBudget)}.`
+          );
+        } else if (previousProgress < 0.8 && newProgress >= 0.8) {
+          alerts.push(
+            `${category} budget is 80% used (${formatMoney(newCategoryExpenses)} of ${formatMoney(categoryBudget)}).`
+          );
+        }
+      }
+    }
+
     setEditingId(null);
     setModalVisible(false);
+
+    // Show the alert after the modal has closed
+    if (alerts.length > 0) {
+      setTimeout(() => {
+        Alert.alert("MONOVA Budget Alert", alerts.join("\n\n"));
+      }, 400);
+    }
   };
 
   // Month navigation
